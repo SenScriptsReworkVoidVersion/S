@@ -1,5 +1,5 @@
 -- DarkMirror UI Library (Optimized, Mobile + Desktop friendly)
--- Improved input handling for mobile: uses Activated, CaptureFocus, and global input checks to avoid ScrollingFrame interception.
+-- FINAL patch: global touch fallbacks for ScrollingFrames, per-element debounce, explicit CaptureFocus for TextBox.
 
 local Library = {}
 Library.__index = Library
@@ -53,6 +53,57 @@ local function isPointInGui(point, gui)
     local ap = gui.AbsolutePosition
     local asz = gui.AbsoluteSize
     return point.X >= ap.X and point.X <= (ap.X + asz.X) and point.Y >= ap.Y and point.Y <= (ap.Y + asz.Y)
+end
+
+-- Attach a robust press handler to any GuiObject (TextButton/TextLabel/etc.)
+-- Uses Activated, MouseButton1Click, and global InputBegan with point-in-gui checks and debounce.
+local function attachPressHandler(guiObject, callback)
+    if not guiObject or not callback then return end
+    local last = 0
+    local debounceWindow = 0.28 -- seconds
+
+    local function trigger()
+        local now = os.clock()
+        if now - last < debounceWindow then return end
+        last = now
+        pcall(callback)
+    end
+
+    -- Activated handles mouse/touch/gamepad reliably on many devices
+    local aConn
+    if guiObject and guiObject.Activated then
+        aConn = guiObject.Activated:Connect(trigger)
+    end
+
+    -- MouseButton1Click for compatibility on desktop
+    local mConn
+    if guiObject and guiObject:IsA("GuiButton") then
+        mConn = guiObject.MouseButton1Click:Connect(function()
+            trigger()
+        end)
+    end
+
+    -- Global InputBegan fallback: this ensures touches that start on ScrollingFrame content still register
+    local beganConn
+    beganConn = UserInputService.InputBegan:Connect(function(input, processed)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local pos = input.Position or UserInputService:GetMouseLocation()
+            if isPointInGui(pos, guiObject) then
+                trigger()
+            end
+        end
+    end)
+
+    -- Clean up when guiObject removed
+    local ancestryConn
+    ancestryConn = guiObject.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            if aConn then aConn:Disconnect() end
+            if mConn then mConn:Disconnect() end
+            if beganConn then beganConn:Disconnect() end
+            if ancestryConn then ancestryConn:Disconnect() end
+        end
+    end)
 end
 
 -- Show/hide floating button (draggable)
@@ -249,8 +300,7 @@ function Library:CreateWindow(guiName, subtitle, version)
         showHideBtn.Image = uiVisible and defaultHideIcon or defaultShowIcon
     end
 
-    showHideBtn.MouseButton1Click:Connect(toggleUI)
-    showHideBtn.TouchTap:Connect(toggleUI)
+    attachPressHandler(showHideBtn, toggleUI)
 
     -- CreateTab
     function Window:CreateTab(name)
@@ -285,15 +335,13 @@ function Library:CreateWindow(guiName, subtitle, version)
         btn.Parent = sidebar
         btn.ZIndex = 4
 
-        -- Tab activation on click/tap only
-        local function activateTab()
+        -- Tab activation on click/tap only (robust)
+        attachPressHandler(btn, function()
             for _, f in pairs(tabFrames) do f.Visible = false end
             tabFrame.Visible = true
             for _, b in pairs(sidebarButtons) do b.BackgroundColor3 = Color3.fromRGB(30, 30, 30) end
             btn.BackgroundColor3 = Color3.fromRGB(60, 0, 0)
-        end
-        -- Use Activated to handle mouse/touch/gamepad
-        btn.Activated:Connect(activateTab)
+        end)
 
         table.insert(sidebarButtons, btn)
         if #sidebarButtons == 1 then
@@ -351,7 +399,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             return sectionRow
         end
 
-        -- Toggle (Activated for touch)
+        -- Toggle (robust press handling)
         function Tab:CreateToggle(name, callback)
             callback = callback or function() end
             local toggleSwitch = Instance.new("TextButton")
@@ -398,8 +446,7 @@ function Library:CreateWindow(guiName, subtitle, version)
                 if globalCallback then pcall(globalCallback, "Toggle", name, toggleOn) end
             end
 
-            -- Use Activated for reliable cross-input activation
-            toggleSwitch.Activated:Connect(onTogglePress)
+            attachPressHandler(toggleSwitch, onTogglePress)
 
             updateToggle(true)
             createRow(tabFrame, name..":", toggleSwitch)
@@ -454,10 +501,8 @@ function Library:CreateWindow(guiName, subtitle, version)
                 if globalCallback then pcall(globalCallback, "Slider", name, sliderValue) end
             end
 
-            -- Global input handlers (so touches that start on parent ScrollingFrame still register)
             local beganConn, changedConn, endedConn
             beganConn = UserInputService.InputBegan:Connect(function(input, processed)
-                if processed then return end
                 if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                     local pos = input.Position or UserInputService:GetMouseLocation()
                     if isPointInGui(pos, sliderFrame) then
@@ -478,7 +523,6 @@ function Library:CreateWindow(guiName, subtitle, version)
                 end
             end)
 
-            -- Clean up if the slider is removed
             sliderFrame.AncestryChanged:Connect(function(_, parent)
                 if not parent then
                     if beganConn then beganConn:Disconnect() end
@@ -488,7 +532,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             end)
 
             -- Initialize
-            spawn(function()
+            task.spawn(function()
                 local rel = 0
                 if max ~= min then rel = (default - min) / (max - min) end
                 sliderThumb.Position = UDim2.new(math.clamp(rel,0,1), -7, 0, 2)
@@ -499,7 +543,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             return sliderFrame
         end
 
-        -- Dropdown (uses Activated + fallback touch input)
+        -- Dropdown (uses global press handler for toggling + per-option handler)
         function Tab:CreateDropdown(name, options, callback)
             options = options or {}
             callback = callback or function() end
@@ -553,32 +597,21 @@ function Library:CreateWindow(guiName, subtitle, version)
                 optBtn.TextSize = 14
                 optBtn.Parent = dropdownListFrame
 
-                -- Prefer Activated (handles touch/mouse/gamepad). Add InputBegan fallback.
-                optBtn.Activated:Connect(function()
+                attachPressHandler(optBtn, function()
                     selectOption(opt)
-                end)
-                optBtn.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.Touch then
-                        selectOption(opt)
-                    end
                 end)
             end
 
             local function toggleDropdown()
                 dropdownListFrame.Visible = not dropdownListFrame.Visible
             end
-            dropdownBtn.Activated:Connect(toggleDropdown)
-            dropdownBtn.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch then
-                    toggleDropdown()
-                end
-            end)
+            attachPressHandler(dropdownBtn, toggleDropdown)
 
             createRow(tabFrame, name..":", dropdownFrame)
             return dropdownFrame
         end
 
-        -- Textbox (CaptureFocus on touch + FocusLost for enter)
+        -- Textbox (use global InputBegan to CaptureFocus on touch if ScrollingFrame intercepts)
         function Tab:CreateTextbox(name, placeholder, callback)
             callback = callback or function() end
             placeholder = placeholder or ""
@@ -594,16 +627,23 @@ function Library:CreateWindow(guiName, subtitle, version)
             tb.ClearTextOnFocus = false
             createUICorner(tb, UDim.new(0,8))
 
-            -- If touch begins on the textbox, explicitly capture focus to open mobile keyboard
-            tb.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch then
-                    -- sometimes Focus doesn't trigger due to scrolling; force it
-                    pcall(function() tb:CaptureFocus() end)
+            -- If touch begins on the textbox area, force capture focus to open keyboard
+            local beganConn
+            beganConn = UserInputService.InputBegan:Connect(function(input, processed)
+                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    local pos = input.Position or UserInputService:GetMouseLocation()
+                    if isPointInGui(pos, tb) then
+                        pcall(function()
+                            if tb and tb.Parent then
+                                tb:CaptureFocus()
+                            end
+                        end)
+                    end
                 end
             end)
 
             tb.Focused:Connect(function()
-                -- optional: you can change appearance when focused
+                -- visual focus handling if needed
             end)
             tb.FocusLost:Connect(function(enterPressed)
                 if enterPressed then
@@ -612,11 +652,15 @@ function Library:CreateWindow(guiName, subtitle, version)
                 end
             end)
 
+            tb.AncestryChanged:Connect(function(_, parent)
+                if not parent and beganConn then beganConn:Disconnect() end
+            end)
+
             createRow(tabFrame, name..":", tb)
             return tb
         end
 
-        -- Button (Activated)
+        -- Button (use robust press handler)
         function Tab:CreateButton(name, callback)
             callback = callback or function() end
             local btn = Instance.new("TextButton")
@@ -633,15 +677,7 @@ function Library:CreateWindow(guiName, subtitle, version)
                 if globalCallback then pcall(globalCallback, "Button", name, true) end
             end
 
-            -- Activated is reliable across inputs
-            btn.Activated:Connect(press)
-            btn.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch then
-                    -- InputBegan sometimes fires before Activated on mobile; ensure responsiveness
-                    -- But avoid double-calling by not calling press here (Activated will also fire).
-                    -- We only use CaptureFocus pattern for TextBox; leave button to Activated.
-                end
-            end)
+            attachPressHandler(btn, press)
 
             createRow(tabFrame, name..":", btn)
             return btn
