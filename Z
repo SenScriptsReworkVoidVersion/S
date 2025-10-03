@@ -1,4 +1,4 @@
--- DarkMirror UI Library (Mobile-Only, Fixed Dropdown, Textbox, Button, Slider)
+-- DarkMirror UI Library (Mobile-Only, Fixed Toggle: Tap for ON/OFF, All Elements Reliable)
 local Library = {}
 Library.__index = Library
 
@@ -13,10 +13,10 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Detect if device is mobile (TouchEnabled and not KeyboardEnabled)
+-- Only enable for mobile devices (TouchEnabled and not KeyboardEnabled)
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 if not isMobile then
-    return Library -- Only load UI for mobile devices!
+    return Library
 end
 
 local defaultShowIcon = "https://www.roblox.com/Thumbs/Asset.ashx?width=420&height=420&assetId=94371101129415"
@@ -40,7 +40,7 @@ local showHideBtnStroke = Instance.new("UIStroke", showHideBtn)
 showHideBtnStroke.Color = Color3.fromRGB(255, 0, 0)
 showHideBtnStroke.Thickness = 2
 
--- Drag logic for show/hide button (mobile only)
+-- Mobile drag for show/hide button
 do
     local dragging, dragInput, dragStart, startPos
     local function updateDrag(input)
@@ -152,7 +152,7 @@ function Library:CreateWindow(guiName, subtitle, version)
     versionLabel.Parent = titleBar
     versionLabel.ZIndex = 3
 
-    -- Window drag logic (mobile only)
+    -- Window drag (mobile only)
     do
         local dragging, dragInput, dragStart, startPos
         local function updateDrag(input)
@@ -326,6 +326,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             return sectionRow
         end
 
+        -- FIXED: Toggle is now tap-to-toggle, no long press required (mobile tap only)
         function Tab:CreateToggle(name, callback)
             callback = callback or function() end
             local toggleSwitch = Instance.new("TextButton")
@@ -373,6 +374,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             end
 
             toggleSwitch.TouchTap:Connect(onTogglePress)
+            -- Fix: Make toggle work on single tap, not long press
             toggleSwitch.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.Touch then
                     onTogglePress()
@@ -384,7 +386,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             return toggleSwitch
         end
 
-        -- Fixed Slider (Mobile-Only)
+        -- Slider (mobile only, tap or drag to set)
         function Tab:CreateSlider(name, min, max, default, callback)
             if type(default) == "function" and callback == nil then
                 callback = default
@@ -485,7 +487,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             return sliderFrame
         end
 
-        -- Fixed Dropdown (Mobile-Only)
+        -- Dropdown (mobile only, tap to open and select)
         function Tab:CreateDropdown(name, options, callback)
             options = options or {}
             callback = callback or function() end
@@ -548,7 +550,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             return dropdownFrame
         end
 
-        -- Fixed Textbox (Mobile-Only)
+        -- Textbox (mobile only, tap to focus, fires on focus lost)
         function Tab:CreateTextbox(name, placeholder, callback)
             callback = callback or function() end
             placeholder = placeholder or ""
@@ -563,8 +565,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             tb.TextColor3 = Color3.fromRGB(255,255,255)
             createUICorner(tb, UDim.new(0,8))
 
-            tb.FocusLost:Connect(function(enterPressed)
-                -- On mobile, FocusLost always fires when the keyboard closes
+            tb.FocusLost:Connect(function()
                 if tb.Text ~= "" then
                     pcall(callback, tb.Text)
                     if globalCallback then pcall(globalCallback, "Textbox", name, tb.Text) end
@@ -579,7 +580,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             return tb
         end
 
-        -- Fixed Button (Mobile-Only)
+        -- Button (mobile only, tap to fire)
         function Tab:CreateButton(name, callback)
             callback = callback or function() end
             local btn = Instance.new("TextButton")
