@@ -1,5 +1,5 @@
--- DarkMirror Classic UI Library (Cool Look - Mobile & PC Friendly)
--- FIXED: Controls now show up in the tab! Controls are parented to a vertical UIListLayout.
+-- DarkMirror Classic UI Library (Executor Safe)
+-- By Copilot: Patched for executor use! Always parents to PlayerGui correctly.
 
 local Library = {}
 Library.__index = Library
@@ -10,13 +10,16 @@ function Library:SetCallback(func)
     globalCallback = func
 end
 
--- Services
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+-- Executor-safe PlayerGui getter
+local function getPlayerGui()
+    local lp = game:GetService("Players").LocalPlayer
+    local pg
+    repeat
+        pg = lp:FindFirstChildOfClass("PlayerGui")
+        if not pg then task.wait() end
+    until pg
+    return pg
+end
 
 -- Theme
 local THEME = {
@@ -26,14 +29,17 @@ local THEME = {
     accentDark = Color3.fromRGB(160,30,30),
     white = Color3.fromRGB(242,242,242),
     dim = Color3.fromRGB(200,200,200),
-    shadowImg = "rbxassetid://1316045217" -- subtle circle shadow asset
+    shadowImg = "rbxassetid://1316045217"
 }
 
 -- Root GUI
 local baseScreenGui = Instance.new("ScreenGui")
 baseScreenGui.Name = "DarkMirrorClassicUI_Cool"
-baseScreenGui.Parent = playerGui
 baseScreenGui.ResetOnSpawn = false
+baseScreenGui.Parent = getPlayerGui()
+
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local function createUICorner(instance, radius)
     local c = Instance.new("UICorner")
@@ -53,7 +59,7 @@ local function createShadow(parent)
     img.AnchorPoint = Vector2.new(0.5,0.5)
     img.Position = UDim2.new(0.5,0.5,0.5,0.5)
     img.Size = UDim2.new(1.12,0,1.18,0)
-    img.ZIndex = parent.ZIndex - 1
+    img.ZIndex = (parent.ZIndex or 1) - 1
     img.BackgroundTransparency = 1
     img.Image = THEME.shadowImg
     img.ImageTransparency = 0.78
@@ -76,7 +82,6 @@ local function attachPressHandler(guiObject, callback)
     if not guiObject or not callback then return end
     local last = 0
     local debounceWindow = 0.22
-
     local function trigger()
         local now = os.clock()
         if now - last < debounceWindow then return end
@@ -157,7 +162,7 @@ local floatIco = Instance.new("ImageLabel")
 floatIco.Size = UDim2.new(0,34,0,34)
 floatIco.Position = UDim2.new(0.5,-17,0.5,-17)
 floatIco.BackgroundTransparency = 1
-floatIco.Image = "rbxassetid://94371101129415" -- placeholder
+floatIco.Image = "rbxassetid://94371101129415"
 floatIco.Parent = floatBtn
 
 function Library:CreateWindow(guiName, subtitle, version)
@@ -276,7 +281,6 @@ function Library:CreateWindow(guiName, subtitle, version)
     end)
 
     function Window:CreateTab(name)
-        -- Tab frame and vertical stack for controls
         local tab = Instance.new("Frame")
         tab.Size = UDim2.new(1,0,1,0)
         tab.BackgroundTransparency = 1
@@ -295,7 +299,6 @@ function Library:CreateWindow(guiName, subtitle, version)
         layout.FillDirection = Enum.FillDirection.Vertical
         layout.Padding = UDim.new(0, 10)
 
-        -- sidebar button
         local sb = Instance.new("TextButton")
         sb.Size = UDim2.new(1,-16,0,42)
         sb.Position = UDim2.new(0,8,0,0)
@@ -308,7 +311,6 @@ function Library:CreateWindow(guiName, subtitle, version)
         sb.ZIndex = 53
         createUICorner(sb, UDim.new(0,8))
 
-        -- Selected styling
         local function selectTab()
             for _,f in pairs(tabFrames) do f.Visible = false end
             tab.Visible = true
@@ -326,7 +328,6 @@ function Library:CreateWindow(guiName, subtitle, version)
         local TabAPI = {}
         TabAPI.__index = TabAPI
 
-        -- Helper: add to stack
         local function addControl(ctrl)
             ctrl.Parent = stack
             return ctrl
@@ -472,7 +473,6 @@ function Library:CreateWindow(guiName, subtitle, version)
                 end
             end)
 
-            -- init
             task.spawn(function()
                 local rel = 0
                 if max ~= min then rel = (default - min)/(max - min) end
@@ -506,7 +506,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             arrow.Size = UDim2.new(0,20,0,20)
             arrow.Position = UDim2.new(1,-28,0.5,-10)
             arrow.BackgroundTransparency = 1
-            arrow.Image = "rbxassetid://3926305904" -- chevron
+            arrow.Image = "rbxassetid://3926305904"
             arrow.Rotation = 90
             arrow.Parent = container
 
@@ -702,7 +702,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             hsvSquare.Position = UDim2.new(0,12,0,12)
             hsvSquare.BackgroundColor3 = Color3.fromRGB(255,255,255)
             hsvSquare.AutoButtonColor = false
-            hsvSquare.Image = "rbxassetid://6020299385" -- HSV square asset
+            hsvSquare.Image = "rbxassetid://6020299385"
             hsvSquare.Parent = overlay
 
             local hueSlider = Instance.new("ImageButton")
@@ -710,7 +710,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             hueSlider.Position = UDim2.new(0,142,0,12)
             hueSlider.BackgroundColor3 = Color3.fromRGB(255,255,255)
             hueSlider.AutoButtonColor = false
-            hueSlider.Image = "rbxassetid://6020299386" -- Hue bar asset
+            hueSlider.Image = "rbxassetid://6020299386"
             hueSlider.Parent = overlay
 
             local confirmBtn = Instance.new("TextButton")
