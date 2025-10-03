@@ -1,6 +1,5 @@
 -- DarkMirror Classic UI Library (Cool Look - Mobile & PC Friendly)
--- Rebuilt and optimized: dark theme with red accent, smooth animations, shadows, and robust mobile touch handling.
--- API compatible with original: Library:CreateWindow -> Window:CreateTab -> Tab:CreateSection/CreateToggle/CreateSlider/CreateDropdown/CreateTextbox/CreateButton
+-- FIXED: Controls now show up in the tab! Controls are parented to a vertical UIListLayout.
 
 local Library = {}
 Library.__index = Library
@@ -36,7 +35,6 @@ baseScreenGui.Name = "DarkMirrorClassicUI_Cool"
 baseScreenGui.Parent = playerGui
 baseScreenGui.ResetOnSpawn = false
 
--- Utility creators
 local function createUICorner(instance, radius)
     local c = Instance.new("UICorner")
     c.CornerRadius = radius or UDim.new(0, 8)
@@ -74,7 +72,6 @@ local function isPointInGui(point, gui)
     return point.X >= ap.X and point.X <= (ap.X + asz.X) and point.Y >= ap.Y and point.Y <= (ap.Y + asz.Y)
 end
 
--- Robust press handler used for buttons, toggles, dropdowns options etc.
 local function attachPressHandler(guiObject, callback)
     if not guiObject or not callback then return end
     local last = 0
@@ -156,7 +153,6 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Small icon inside floatBtn
 local floatIco = Instance.new("ImageLabel")
 floatIco.Size = UDim2.new(0,34,0,34)
 floatIco.Position = UDim2.new(0.5,-17,0.5,-17)
@@ -164,7 +160,6 @@ floatIco.BackgroundTransparency = 1
 floatIco.Image = "rbxassetid://94371101129415" -- placeholder
 floatIco.Parent = floatBtn
 
--- Main window factory
 function Library:CreateWindow(guiName, subtitle, version)
     local Window = {}
     Window.__index = Window
@@ -180,7 +175,6 @@ function Library:CreateWindow(guiName, subtitle, version)
     createShadow(main)
     main.ZIndex = 50
 
-    -- Titlebar
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1,0,0,52)
     titleBar.BackgroundTransparency = 0
@@ -249,7 +243,6 @@ function Library:CreateWindow(guiName, subtitle, version)
         end)
     end
 
-    -- Sidebar & content
     local sidebar = Instance.new("ScrollingFrame")
     sidebar.Size = UDim2.new(0,170,1,-60)
     sidebar.Position = UDim2.new(0,0,0,60)
@@ -278,13 +271,12 @@ function Library:CreateWindow(guiName, subtitle, version)
     local tabFrames = {}
     local sidebarButtons = {}
 
-    -- floatBtn toggles main visibility
     attachPressHandler(floatBtn, function()
         main.Visible = not main.Visible
     end)
 
-    -- CreateTab
     function Window:CreateTab(name)
+        -- Tab frame and vertical stack for controls
         local tab = Instance.new("Frame")
         tab.Size = UDim2.new(1,0,1,0)
         tab.BackgroundTransparency = 1
@@ -292,9 +284,16 @@ function Library:CreateWindow(guiName, subtitle, version)
         tabFrames[name] = tab
         tab.ZIndex = 52
 
-        local layout = Instance.new("UIListLayout", tab)
+        local stack = Instance.new("Frame")
+        stack.Name = "Stack"
+        stack.BackgroundTransparency = 1
+        stack.Size = UDim2.new(1,0,1,0)
+        stack.AutomaticSize = Enum.AutomaticSize.Y
+        stack.Parent = tab
+
+        local layout = Instance.new("UIListLayout", stack)
         layout.FillDirection = Enum.FillDirection.Vertical
-        layout.Padding = UDim.new(0,10)
+        layout.Padding = UDim.new(0, 10)
 
         -- sidebar button
         local sb = Instance.new("TextButton")
@@ -327,41 +326,18 @@ function Library:CreateWindow(guiName, subtitle, version)
         local TabAPI = {}
         TabAPI.__index = TabAPI
 
-        local function createRow(parent, labelText, element)
-            local row = Instance.new("Frame")
-            row.Size = UDim2.new(0.96,0,0, math.max((element.Size and element.Size.Y and element.Size.Y.Offset) or 44, 44))
-            row.BackgroundTransparency = 1
-            row.LayoutOrder = #parent:GetChildren()
-            row.Parent = parent
-
-            local label = Instance.new("TextLabel")
-            label.Size = UDim2.new(0.48,0,1,0)
-            label.BackgroundTransparency = 1
-            label.Text = labelText
-            label.Font = Enum.Font.GothamBold
-            label.TextSize = 15
-            label.TextColor3 = THEME.white
-            label.TextXAlignment = Enum.TextXAlignment.Left
-            label.Parent = row
-
-            element.Parent = row
-            local elW = 0 local elH = 44
-            if element.Size and element.Size.X and element.Size.Y then
-                elW = element.Size.X.Offset
-                elH = element.Size.Y.Offset
-            end
-            element.Position = UDim2.new(1, -elW - 8, 0.5, -elH/2)
-            return row
+        -- Helper: add to stack
+        local function addControl(ctrl)
+            ctrl.Parent = stack
+            return ctrl
         end
 
         function TabAPI:CreateSection(titleText)
             local sec = Instance.new("Frame")
-            sec.Size = UDim2.new(0.96,0,0,28)
+            sec.Size = UDim2.new(1,0,0,28)
             sec.BackgroundTransparency = 0
             sec.BackgroundColor3 = THEME.bg
-            sec.Parent = tab
             createUICorner(sec, UDim.new(0,6))
-
             local txt = Instance.new("TextLabel")
             txt.Text = titleText
             txt.Font = Enum.Font.GothamBold
@@ -369,8 +345,10 @@ function Library:CreateWindow(guiName, subtitle, version)
             txt.TextColor3 = THEME.accent
             txt.BackgroundTransparency = 1
             txt.Position = UDim2.new(0,8,0,4)
+            txt.Size = UDim2.new(1,-16,1,-8)
+            txt.TextXAlignment = Enum.TextXAlignment.Left
             txt.Parent = sec
-            return sec
+            return addControl(sec)
         end
 
         function TabAPI:CreateToggle(name, callback)
@@ -378,7 +356,6 @@ function Library:CreateWindow(guiName, subtitle, version)
             local btn = Instance.new("Frame")
             btn.Size = UDim2.new(0,72,0,32)
             btn.BackgroundColor3 = THEME.panel
-            btn.Parent = tab
             createUICorner(btn, UDim.new(0,16))
 
             local track = Instance.new("Frame")
@@ -413,7 +390,7 @@ function Library:CreateWindow(guiName, subtitle, version)
                 if globalCallback then pcall(globalCallback, "Toggle", name, state) end
             end)
 
-            return btn
+            return addControl(btn)
         end
 
         function TabAPI:CreateSlider(name, min, max, default, callback)
@@ -426,7 +403,6 @@ function Library:CreateWindow(guiName, subtitle, version)
             local frame = Instance.new("Frame")
             frame.Size = UDim2.new(0,240,0,36)
             frame.BackgroundColor3 = THEME.panel
-            frame.Parent = tab
             createUICorner(frame, UDim.new(0,8))
 
             local track = Instance.new("Frame")
@@ -504,10 +480,9 @@ function Library:CreateWindow(guiName, subtitle, version)
                 valLabel.Text = tostring(default)
             end)
 
-            return frame
+            return addControl(frame)
         end
 
-        -- Enhanced Dropdown as a big scrollable box
         function TabAPI:CreateDropdown(name, options, callback)
             options = options or {}
             callback = callback or function() end
@@ -515,7 +490,6 @@ function Library:CreateWindow(guiName, subtitle, version)
             local container = Instance.new("Frame")
             container.Size = UDim2.new(0,200,0,38)
             container.BackgroundColor3 = THEME.panel
-            container.Parent = tab
             createUICorner(container, UDim.new(0,8))
 
             local label = Instance.new("TextLabel")
@@ -546,7 +520,6 @@ function Library:CreateWindow(guiName, subtitle, version)
             createUICorner(dropdownFrame, UDim.new(0,8))
             dropdownFrame.ZIndex = 100
 
-            -- Make dropdown scrollable and big
             local scroll = Instance.new("ScrollingFrame")
             scroll.Size = UDim2.new(1,0,1,0)
             scroll.BackgroundTransparency = 1
@@ -564,7 +537,6 @@ function Library:CreateWindow(guiName, subtitle, version)
                 dropdownFrame.Visible = not dropdownFrame.Visible
                 TweenService:Create(arrow, TweenInfo.new(0.18), {Rotation = dropdownFrame.Visible and 270 or 90}):Play()
                 if dropdownFrame.Visible then
-                    -- Animate open
                     dropdownFrame.Size = UDim2.new(1,0,0,0)
                     TweenService:Create(dropdownFrame, TweenInfo.new(0.21), {Size = UDim2.new(1,0,0, math.min(#options*34+8, 180))}):Play()
                 else
@@ -594,19 +566,16 @@ function Library:CreateWindow(guiName, subtitle, version)
                 end)
             end
 
-            -- clicking outside closes dropdown
-            local function onInputBegan(input)
-                if dropdownFrame.Visible and not isPointInGui(input.Position, dropdownFrame) and not isPointInGui(input.Position, container) then
-                    openDropdown()
-                end
-            end
             UserInputService.InputBegan:Connect(function(input, processed)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    onInputBegan(input)
+                if dropdownFrame.Visible and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+                    local pos = input.Position or UserInputService:GetMouseLocation()
+                    if not isPointInGui(pos, dropdownFrame) and not isPointInGui(pos, container) then
+                        openDropdown()
+                    end
                 end
             end)
 
-            return container
+            return addControl(container)
         end
 
         function TabAPI:CreateTextbox(name, placeholder, callback)
@@ -622,10 +591,8 @@ function Library:CreateWindow(guiName, subtitle, version)
             box.TextSize = 14
             box.TextColor3 = THEME.white
             box.ClearTextOnFocus = false
-            box.Parent = tab
             createUICorner(box, UDim.new(0,8))
 
-            -- glow when focused
             local glow = Instance.new("UIStroke", box)
             glow.Transparency = 1
             glow.Thickness = 2
@@ -642,7 +609,6 @@ function Library:CreateWindow(guiName, subtitle, version)
                 end
             end)
 
-            -- Ensure touch opens keyboard even if inside ScrollingFrame
             local beganConn
             beganConn = UserInputService.InputBegan:Connect(function(input, processed)
                 if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -656,7 +622,7 @@ function Library:CreateWindow(guiName, subtitle, version)
                 if not parent and beganConn then beganConn:Disconnect() end
             end)
 
-            return box
+            return addControl(box)
         end
 
         function TabAPI:CreateButton(name, callback)
@@ -668,10 +634,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             b.Font = Enum.Font.GothamBold
             b.TextSize = 15
             b.TextColor3 = THEME.white
-            b.Parent = tab
             createUICorner(b, UDim.new(0,10))
-
-            -- shadow
             createShadow(b)
 
             attachPressHandler(b, function()
@@ -683,22 +646,18 @@ function Library:CreateWindow(guiName, subtitle, version)
                 if globalCallback then pcall(globalCallback, "Button", name, true) end
             end)
 
-            return b
+            return addControl(b)
         end
 
-        -- Color Picker (simple, HSV square + slider, dark theme)
         function TabAPI:CreateColorPicker(name, default, callback)
             callback = callback or function() end
             default = default or Color3.fromRGB(255,0,0)
-            -- Container
             local picker = Instance.new("Frame")
             picker.Size = UDim2.new(0,220,0,60)
             picker.BackgroundColor3 = THEME.panel
-            picker.Parent = tab
-            createUICorner(picker, UDim.new(0,8))
             picker.ClipsDescendants = false
+            createUICorner(picker, UDim.new(0,8))
 
-            -- Color preview
             local preview = Instance.new("Frame")
             preview.Size = UDim2.new(0,38,0,38)
             preview.Position = UDim2.new(0,10,0.5,-19)
@@ -707,7 +666,6 @@ function Library:CreateWindow(guiName, subtitle, version)
             createUICorner(preview, UDim.new(0,8))
             createUIStroke(preview, THEME.accent, 1)
 
-            -- Expand button
             local expand = Instance.new("TextButton")
             expand.Size = UDim2.new(0,38,0,38)
             expand.Position = UDim2.new(0,10,0.5,-19)
@@ -716,7 +674,6 @@ function Library:CreateWindow(guiName, subtitle, version)
             expand.Parent = picker
             expand.ZIndex = 2
 
-            -- Value label
             local valText = Instance.new("TextLabel")
             valText.Size = UDim2.new(0,90,0,26)
             valText.Position = UDim2.new(0,60,0.5,-13)
@@ -728,20 +685,18 @@ function Library:CreateWindow(guiName, subtitle, version)
             valText.TextXAlignment = Enum.TextXAlignment.Left
             valText.Parent = picker
 
-            -- Main color picker overlay
             local overlay = Instance.new("Frame")
             overlay.Size = UDim2.new(0,176,0,176)
-            overlay.Position = UDim2.new(0,0,0,0)
+            overlay.Position = UDim2.new(0,0,1,8)
             overlay.BackgroundColor3 = Color3.fromRGB(20,20,20)
             overlay.Visible = false
             overlay.Parent = picker
             overlay.ZIndex = 100
             overlay.AnchorPoint = Vector2.new(0,0)
-            overlay.Position = UDim2.new(0,0,1,8)
             createUICorner(overlay, UDim.new(0,8))
             createUIStroke(overlay, THEME.accent, 1)
+            createShadow(overlay)
 
-            -- HSV square
             local hsvSquare = Instance.new("ImageButton")
             hsvSquare.Size = UDim2.new(0,120,0,120)
             hsvSquare.Position = UDim2.new(0,12,0,12)
@@ -750,7 +705,6 @@ function Library:CreateWindow(guiName, subtitle, version)
             hsvSquare.Image = "rbxassetid://6020299385" -- HSV square asset
             hsvSquare.Parent = overlay
 
-            -- Vertical hue slider
             local hueSlider = Instance.new("ImageButton")
             hueSlider.Size = UDim2.new(0,20,0,120)
             hueSlider.Position = UDim2.new(0,142,0,12)
@@ -759,7 +713,6 @@ function Library:CreateWindow(guiName, subtitle, version)
             hueSlider.Image = "rbxassetid://6020299386" -- Hue bar asset
             hueSlider.Parent = overlay
 
-            -- Confirm button
             local confirmBtn = Instance.new("TextButton")
             confirmBtn.Size = UDim2.new(0,70,0,28)
             confirmBtn.Position = UDim2.new(0.5,-35,1,-36)
@@ -771,10 +724,6 @@ function Library:CreateWindow(guiName, subtitle, version)
             confirmBtn.Parent = overlay
             createUICorner(confirmBtn, UDim.new(0,8))
 
-            -- Shadow for overlay
-            createShadow(overlay)
-
-            -- Color logic
             local selH, selS, selV = Color3.toHSV(default)
             if selS ~= selS then selS = 1 end
             if selV ~= selV then selV = 1 end
@@ -785,7 +734,6 @@ function Library:CreateWindow(guiName, subtitle, version)
                 valText.Text = string.format("R:%d G:%d B:%d", math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255))
             end
 
-            -- HSV square input
             hsvSquare.MouseButton1Down:Connect(function(x, y)
                 local p = UserInputService:GetMouseLocation()
                 local pos = hsvSquare.AbsolutePosition
@@ -824,7 +772,6 @@ function Library:CreateWindow(guiName, subtitle, version)
                 end
             end)
 
-            -- Hue slider input
             hueSlider.MouseButton1Down:Connect(function(x, y)
                 local p = UserInputService:GetMouseLocation()
                 local pos = hueSlider.AbsolutePosition
@@ -855,7 +802,6 @@ function Library:CreateWindow(guiName, subtitle, version)
                 end
             end)
 
-            -- Confirm button
             attachPressHandler(confirmBtn, function()
                 local c = Color3.fromHSV(selH, selS, selV)
                 overlay.Visible = false
@@ -864,12 +810,10 @@ function Library:CreateWindow(guiName, subtitle, version)
                 if globalCallback then pcall(globalCallback, "ColorPicker", name, c) end
             end)
 
-            -- Show/hide overlay
             attachPressHandler(expand, function()
                 overlay.Visible = not overlay.Visible
             end)
 
-            -- clicking outside closes overlay
             UserInputService.InputBegan:Connect(function(input, processed)
                 if overlay.Visible and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
                     local pos = input.Position or UserInputService:GetMouseLocation()
@@ -879,10 +823,9 @@ function Library:CreateWindow(guiName, subtitle, version)
                 end
             end)
 
-            -- Initial state
             updatePreview()
 
-            return picker
+            return addControl(picker)
         end
 
         return TabAPI
