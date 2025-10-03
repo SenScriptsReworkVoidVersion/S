@@ -507,12 +507,13 @@ function Library:CreateWindow(guiName, subtitle, version)
             return frame
         end
 
+        -- Enhanced Dropdown as a big scrollable box
         function TabAPI:CreateDropdown(name, options, callback)
             options = options or {}
             callback = callback or function() end
 
             local container = Instance.new("Frame")
-            container.Size = UDim2.new(0,200,0,32)
+            container.Size = UDim2.new(0,200,0,38)
             container.BackgroundColor3 = THEME.panel
             container.Parent = tab
             createUICorner(container, UDim.new(0,8))
@@ -535,40 +536,74 @@ function Library:CreateWindow(guiName, subtitle, version)
             arrow.Rotation = 90
             arrow.Parent = container
 
-            local list = Instance.new("Frame")
-            list.Size = UDim2.new(1,0,0, math.max(0,#options*30))
-            list.Position = UDim2.new(0,0,1,6)
-            list.BackgroundColor3 = Color3.fromRGB(22,22,22)
-            list.Visible = false
-            list.ClipsDescendants = true
-            list.Parent = container
-            createUICorner(list, UDim.new(0,8))
+            local dropdownFrame = Instance.new("Frame")
+            dropdownFrame.Size = UDim2.new(1, 0, 0, 0)
+            dropdownFrame.Position = UDim2.new(0, 0, 1, 4)
+            dropdownFrame.BackgroundColor3 = Color3.fromRGB(22,22,22)
+            dropdownFrame.Visible = false
+            dropdownFrame.ClipsDescendants = true
+            dropdownFrame.Parent = container
+            createUICorner(dropdownFrame, UDim.new(0,8))
+            dropdownFrame.ZIndex = 100
 
-            local layout = Instance.new("UIListLayout", list)
+            -- Make dropdown scrollable and big
+            local scroll = Instance.new("ScrollingFrame")
+            scroll.Size = UDim2.new(1,0,1,0)
+            scroll.BackgroundTransparency = 1
+            scroll.CanvasSize = UDim2.new(0,0,0, #options*34)
+            scroll.ScrollBarThickness = 8
+            scroll.Parent = dropdownFrame
+            scroll.ZIndex = 101
+            scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+            local layout = Instance.new("UIListLayout", scroll)
             layout.SortOrder = Enum.SortOrder.LayoutOrder
-            layout.Padding = UDim.new(0,2)
+            layout.Padding = UDim.new(0, 2)
+
+            local function openDropdown()
+                dropdownFrame.Visible = not dropdownFrame.Visible
+                TweenService:Create(arrow, TweenInfo.new(0.18), {Rotation = dropdownFrame.Visible and 270 or 90}):Play()
+                if dropdownFrame.Visible then
+                    -- Animate open
+                    dropdownFrame.Size = UDim2.new(1,0,0,0)
+                    TweenService:Create(dropdownFrame, TweenInfo.new(0.21), {Size = UDim2.new(1,0,0, math.min(#options*34+8, 180))}):Play()
+                else
+                    TweenService:Create(dropdownFrame, TweenInfo.new(0.18), {Size = UDim2.new(1,0,0,0)}):Play()
+                end
+            end
+
+            attachPressHandler(container, openDropdown)
 
             for _,opt in ipairs(options) do
                 local b = Instance.new("TextButton")
-                b.Size = UDim2.new(1,0,0,28)
-                b.BackgroundTransparency = 1
+                b.Size = UDim2.new(1,0,0,32)
+                b.BackgroundColor3 = Color3.fromRGB(27,27,27)
                 b.Text = opt
                 b.Font = Enum.Font.Gotham
                 b.TextColor3 = THEME.white
                 b.TextSize = 14
-                b.Parent = list
+                b.Parent = scroll
+                b.ZIndex = 102
+                createUICorner(b, UDim.new(0,6))
+
                 attachPressHandler(b, function()
                     label.Text = opt
-                    list.Visible = false
-                    TweenService:Create(arrow, TweenInfo.new(0.18), {Rotation = 90}):Play()
+                    openDropdown()
                     pcall(callback, opt)
                     if globalCallback then pcall(globalCallback, "Dropdown", name, opt) end
                 end)
             end
 
-            attachPressHandler(container, function()
-                list.Visible = not list.Visible
-                TweenService:Create(arrow, TweenInfo.new(0.18), {Rotation = list.Visible and 270 or 90}):Play()
+            -- clicking outside closes dropdown
+            local function onInputBegan(input)
+                if dropdownFrame.Visible and not isPointInGui(input.Position, dropdownFrame) and not isPointInGui(input.Position, container) then
+                    openDropdown()
+                end
+            end
+            UserInputService.InputBegan:Connect(function(input, processed)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    onInputBegan(input)
+                end
             end)
 
             return container
@@ -649,6 +684,205 @@ function Library:CreateWindow(guiName, subtitle, version)
             end)
 
             return b
+        end
+
+        -- Color Picker (simple, HSV square + slider, dark theme)
+        function TabAPI:CreateColorPicker(name, default, callback)
+            callback = callback or function() end
+            default = default or Color3.fromRGB(255,0,0)
+            -- Container
+            local picker = Instance.new("Frame")
+            picker.Size = UDim2.new(0,220,0,60)
+            picker.BackgroundColor3 = THEME.panel
+            picker.Parent = tab
+            createUICorner(picker, UDim.new(0,8))
+            picker.ClipsDescendants = false
+
+            -- Color preview
+            local preview = Instance.new("Frame")
+            preview.Size = UDim2.new(0,38,0,38)
+            preview.Position = UDim2.new(0,10,0.5,-19)
+            preview.BackgroundColor3 = default
+            preview.Parent = picker
+            createUICorner(preview, UDim.new(0,8))
+            createUIStroke(preview, THEME.accent, 1)
+
+            -- Expand button
+            local expand = Instance.new("TextButton")
+            expand.Size = UDim2.new(0,38,0,38)
+            expand.Position = UDim2.new(0,10,0.5,-19)
+            expand.BackgroundTransparency = 1
+            expand.Text = ""
+            expand.Parent = picker
+            expand.ZIndex = 2
+
+            -- Value label
+            local valText = Instance.new("TextLabel")
+            valText.Size = UDim2.new(0,90,0,26)
+            valText.Position = UDim2.new(0,60,0.5,-13)
+            valText.BackgroundTransparency = 1
+            valText.Text = string.format("R:%d G:%d B:%d", default.R*255, default.G*255, default.B*255)
+            valText.Font = Enum.Font.Gotham
+            valText.TextSize = 13
+            valText.TextColor3 = THEME.white
+            valText.TextXAlignment = Enum.TextXAlignment.Left
+            valText.Parent = picker
+
+            -- Main color picker overlay
+            local overlay = Instance.new("Frame")
+            overlay.Size = UDim2.new(0,176,0,176)
+            overlay.Position = UDim2.new(0,0,0,0)
+            overlay.BackgroundColor3 = Color3.fromRGB(20,20,20)
+            overlay.Visible = false
+            overlay.Parent = picker
+            overlay.ZIndex = 100
+            overlay.AnchorPoint = Vector2.new(0,0)
+            overlay.Position = UDim2.new(0,0,1,8)
+            createUICorner(overlay, UDim.new(0,8))
+            createUIStroke(overlay, THEME.accent, 1)
+
+            -- HSV square
+            local hsvSquare = Instance.new("ImageButton")
+            hsvSquare.Size = UDim2.new(0,120,0,120)
+            hsvSquare.Position = UDim2.new(0,12,0,12)
+            hsvSquare.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            hsvSquare.AutoButtonColor = false
+            hsvSquare.Image = "rbxassetid://6020299385" -- HSV square asset
+            hsvSquare.Parent = overlay
+
+            -- Vertical hue slider
+            local hueSlider = Instance.new("ImageButton")
+            hueSlider.Size = UDim2.new(0,20,0,120)
+            hueSlider.Position = UDim2.new(0,142,0,12)
+            hueSlider.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            hueSlider.AutoButtonColor = false
+            hueSlider.Image = "rbxassetid://6020299386" -- Hue bar asset
+            hueSlider.Parent = overlay
+
+            -- Confirm button
+            local confirmBtn = Instance.new("TextButton")
+            confirmBtn.Size = UDim2.new(0,70,0,28)
+            confirmBtn.Position = UDim2.new(0.5,-35,1,-36)
+            confirmBtn.BackgroundColor3 = THEME.accent
+            confirmBtn.Font = Enum.Font.GothamBold
+            confirmBtn.TextSize = 14
+            confirmBtn.TextColor3 = THEME.white
+            confirmBtn.Text = "OK"
+            confirmBtn.Parent = overlay
+            createUICorner(confirmBtn, UDim.new(0,8))
+
+            -- Shadow for overlay
+            createShadow(overlay)
+
+            -- Color logic
+            local selH, selS, selV = Color3.toHSV(default)
+            if selS ~= selS then selS = 1 end
+            if selV ~= selV then selV = 1 end
+
+            local function updatePreview()
+                local c = Color3.fromHSV(selH, selS, selV)
+                preview.BackgroundColor3 = c
+                valText.Text = string.format("R:%d G:%d B:%d", math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255))
+            end
+
+            -- HSV square input
+            hsvSquare.MouseButton1Down:Connect(function(x, y)
+                local p = UserInputService:GetMouseLocation()
+                local pos = hsvSquare.AbsolutePosition
+                local size = hsvSquare.AbsoluteSize
+                local rel = Vector2.new(
+                    math.clamp((p.X-pos.X)/size.X, 0, 1),
+                    math.clamp((p.Y-pos.Y)/size.Y, 0, 1)
+                )
+                selS = rel.X
+                selV = 1-rel.Y
+                updatePreview()
+            end)
+            hsvSquare.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    local moveConn, upConn
+                    moveConn = UserInputService.InputChanged:Connect(function(i)
+                        if i == input then
+                            local p = i.Position or UserInputService:GetMouseLocation()
+                            local pos = hsvSquare.AbsolutePosition
+                            local size = hsvSquare.AbsoluteSize
+                            local rel = Vector2.new(
+                                math.clamp((p.X-pos.X)/size.X, 0, 1),
+                                math.clamp((p.Y-pos.Y)/size.Y, 0, 1)
+                            )
+                            selS = rel.X
+                            selV = 1-rel.Y
+                            updatePreview()
+                        end
+                    end)
+                    upConn = UserInputService.InputEnded:Connect(function(i)
+                        if i == input then
+                            if moveConn then moveConn:Disconnect() end
+                            if upConn then upConn:Disconnect() end
+                        end
+                    end)
+                end
+            end)
+
+            -- Hue slider input
+            hueSlider.MouseButton1Down:Connect(function(x, y)
+                local p = UserInputService:GetMouseLocation()
+                local pos = hueSlider.AbsolutePosition
+                local size = hueSlider.AbsoluteSize
+                local relY = math.clamp((p.Y-pos.Y)/size.Y, 0, 1)
+                selH = 1-relY
+                updatePreview()
+            end)
+            hueSlider.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    local moveConn, upConn
+                    moveConn = UserInputService.InputChanged:Connect(function(i)
+                        if i == input then
+                            local p = i.Position or UserInputService:GetMouseLocation()
+                            local pos = hueSlider.AbsolutePosition
+                            local size = hueSlider.AbsoluteSize
+                            local relY = math.clamp((p.Y-pos.Y)/size.Y, 0, 1)
+                            selH = 1-relY
+                            updatePreview()
+                        end
+                    end)
+                    upConn = UserInputService.InputEnded:Connect(function(i)
+                        if i == input then
+                            if moveConn then moveConn:Disconnect() end
+                            if upConn then upConn:Disconnect() end
+                        end
+                    end)
+                end
+            end)
+
+            -- Confirm button
+            attachPressHandler(confirmBtn, function()
+                local c = Color3.fromHSV(selH, selS, selV)
+                overlay.Visible = false
+                updatePreview()
+                pcall(callback, c)
+                if globalCallback then pcall(globalCallback, "ColorPicker", name, c) end
+            end)
+
+            -- Show/hide overlay
+            attachPressHandler(expand, function()
+                overlay.Visible = not overlay.Visible
+            end)
+
+            -- clicking outside closes overlay
+            UserInputService.InputBegan:Connect(function(input, processed)
+                if overlay.Visible and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+                    local pos = input.Position or UserInputService:GetMouseLocation()
+                    if not isPointInGui(pos, overlay) and not isPointInGui(pos, expand) then
+                        overlay.Visible = false
+                    end
+                end
+            end)
+
+            -- Initial state
+            updatePreview()
+
+            return picker
         end
 
         return TabAPI
