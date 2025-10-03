@@ -1,5 +1,5 @@
 -- DarkMirror UI Library (Optimized, Mobile + Desktop friendly)
--- Merged and optimized version: preserves original API and structure
+-- Improved input handling for mobile: uses Activated, CaptureFocus, and global input checks to avoid ScrollingFrame interception.
 
 local Library = {}
 Library.__index = Library
@@ -47,6 +47,14 @@ local function isPressInput(input)
     return input and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
 end
 
+-- Returns true if `point` (Vector2) lies within GuiObject's absolute bounds
+local function isPointInGui(point, gui)
+    if not gui or not gui:IsA("GuiObject") then return false end
+    local ap = gui.AbsolutePosition
+    local asz = gui.AbsoluteSize
+    return point.X >= ap.X and point.X <= (ap.X + asz.X) and point.Y >= ap.Y and point.Y <= (ap.Y + asz.Y)
+end
+
 -- Show/hide floating button (draggable)
 local showHideBtn = Instance.new("ImageButton")
 showHideBtn.Size = UDim2.new(0, 60, 0, 60)
@@ -76,9 +84,11 @@ do
             dragging = true
             dragStart = input.Position
             startPos = showHideBtn.Position
+            dragInput = input
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
+                    dragInput = nil
                 end
             end)
         end
@@ -175,9 +185,11 @@ function Library:CreateWindow(guiName, subtitle, version)
                 dragging = true
                 dragStart = input.Position
                 startPos = mainFrame.Position
+                dragInput = input
                 input.Changed:Connect(function()
                     if input.UserInputState == Enum.UserInputState.End then
                         dragging = false
+                        dragInput = nil
                     end
                 end)
             end
@@ -280,8 +292,8 @@ function Library:CreateWindow(guiName, subtitle, version)
             for _, b in pairs(sidebarButtons) do b.BackgroundColor3 = Color3.fromRGB(30, 30, 30) end
             btn.BackgroundColor3 = Color3.fromRGB(60, 0, 0)
         end
-        btn.MouseButton1Click:Connect(activateTab)
-        btn.TouchTap:Connect(activateTab)
+        -- Use Activated to handle mouse/touch/gamepad
+        btn.Activated:Connect(activateTab)
 
         table.insert(sidebarButtons, btn)
         if #sidebarButtons == 1 then
@@ -339,7 +351,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             return sectionRow
         end
 
-        -- Toggle (unchanged behavior, sized a bit larger)
+        -- Toggle (Activated for touch)
         function Tab:CreateToggle(name, callback)
             callback = callback or function() end
             local toggleSwitch = Instance.new("TextButton")
@@ -386,20 +398,15 @@ function Library:CreateWindow(guiName, subtitle, version)
                 if globalCallback then pcall(globalCallback, "Toggle", name, toggleOn) end
             end
 
-            toggleSwitch.MouseButton1Click:Connect(onTogglePress)
-            toggleSwitch.TouchTap:Connect(onTogglePress)
-            toggleSwitch.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch then
-                    onTogglePress()
-                end
-            end)
+            -- Use Activated for reliable cross-input activation
+            toggleSwitch.Activated:Connect(onTogglePress)
 
             updateToggle(true)
             createRow(tabFrame, name..":", toggleSwitch)
             return toggleSwitch
         end
 
-        -- Slider (optimized and mobile-friendly)
+        -- Slider (robust touch support using global UserInputService listeners & bounds check)
         function Tab:CreateSlider(name, min, max, default, callback)
             if type(default) == "function" and callback == nil then
                 callback = default
@@ -433,64 +440,54 @@ function Library:CreateWindow(guiName, subtitle, version)
             sliderValueLabel.Parent = sliderFrame
 
             local sliderValue = default
-            local draggingSlider = false
+            local draggingInput = nil
 
-            local function updateSlider(inputX)
+            local function setFromPosition(px)
                 local absPosX = sliderFrame.AbsolutePosition.X
                 local absSizeX = sliderFrame.AbsoluteSize.X
-                local relativeX = 0
-                if absSizeX > 0 then
-                    relativeX = math.clamp((inputX - absPosX)/absSizeX, 0, 1)
-                end
-                sliderThumb.Position = UDim2.new(relativeX, -7, 0, 2)
-                sliderValue = math.floor(min + (max - min) * relativeX)
+                if absSizeX <= 0 then return end
+                local rel = math.clamp((px - absPosX)/absSizeX, 0, 1)
+                sliderThumb.Position = UDim2.new(rel, -7, 0, 2)
+                sliderValue = math.floor(min + (max - min) * rel)
                 sliderValueLabel.Text = tostring(sliderValue)
                 pcall(callback, sliderValue)
                 if globalCallback then pcall(globalCallback, "Slider", name, sliderValue) end
             end
 
-            local function beginDrag(input)
-                if not input then return end
-                updateSlider(input.Position.X)
-                draggingSlider = true
-            end
-            local function endDrag()
-                draggingSlider = false
-            end
-
-            sliderFrame.InputBegan:Connect(function(input)
-                if isPressInput(input) then
-                    beginDrag(input)
+            -- Global input handlers (so touches that start on parent ScrollingFrame still register)
+            local beganConn, changedConn, endedConn
+            beganConn = UserInputService.InputBegan:Connect(function(input, processed)
+                if processed then return end
+                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    local pos = input.Position or UserInputService:GetMouseLocation()
+                    if isPointInGui(pos, sliderFrame) then
+                        draggingInput = input
+                        setFromPosition(pos.X)
+                    end
                 end
             end)
-            sliderFrame.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    endDrag()
+            changedConn = UserInputService.InputChanged:Connect(function(input)
+                if draggingInput and input == draggingInput and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+                    local pos = input.Position or UserInputService:GetMouseLocation()
+                    setFromPosition(pos.X)
                 end
             end)
-            sliderThumb.InputBegan:Connect(function(input)
-                if isPressInput(input) then
-                    beginDrag(input)
-                end
-            end)
-            sliderThumb.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    endDrag()
-                end
-            end)
-            UserInputService.InputChanged:Connect(function(input)
-                if draggingSlider and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                    updateSlider(input.Position.X)
+            endedConn = UserInputService.InputEnded:Connect(function(input)
+                if draggingInput and input == draggingInput then
+                    draggingInput = nil
                 end
             end)
 
-            sliderFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
-                local rel = 0
-                if max ~= min then rel = (default - min) / (max - min) end
-                sliderThumb.Position = UDim2.new(math.clamp(rel,0,1), -7, 0, 2)
-                sliderValueLabel.Text = tostring(default)
+            -- Clean up if the slider is removed
+            sliderFrame.AncestryChanged:Connect(function(_, parent)
+                if not parent then
+                    if beganConn then beganConn:Disconnect() end
+                    if changedConn then changedConn:Disconnect() end
+                    if endedConn then endedConn:Disconnect() end
+                end
             end)
-            -- initialize position
+
+            -- Initialize
             spawn(function()
                 local rel = 0
                 if max ~= min then rel = (default - min) / (max - min) end
@@ -502,7 +499,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             return sliderFrame
         end
 
-        -- Dropdown (optimized and touch-friendly)
+        -- Dropdown (uses Activated + fallback touch input)
         function Tab:CreateDropdown(name, options, callback)
             options = options or {}
             callback = callback or function() end
@@ -528,7 +525,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             dropdownBtn.Parent = dropdownFrame
 
             local dropdownListFrame = Instance.new("Frame")
-            dropdownListFrame.Size = UDim2.new(1,0,0,#options*26)
+            dropdownListFrame.Size = UDim2.new(1,0,0,math.max(0, #options*26))
             dropdownListFrame.Position = UDim2.new(0,0,1,2)
             dropdownListFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
             dropdownListFrame.Visible = false
@@ -538,6 +535,13 @@ function Library:CreateWindow(guiName, subtitle, version)
             local listLayout = Instance.new("UIListLayout", dropdownListFrame)
             listLayout.SortOrder = Enum.SortOrder.LayoutOrder
             listLayout.Padding = UDim.new(0, 2)
+
+            local function selectOption(opt)
+                dropdownLabel.Text = opt
+                dropdownListFrame.Visible = false
+                pcall(callback, opt)
+                if globalCallback then pcall(globalCallback, "Dropdown", name, opt) end
+            end
 
             for _, opt in ipairs(options) do
                 local optBtn = Instance.new("TextButton")
@@ -549,29 +553,32 @@ function Library:CreateWindow(guiName, subtitle, version)
                 optBtn.TextSize = 14
                 optBtn.Parent = dropdownListFrame
 
-                local function selectOpt()
-                    dropdownLabel.Text = opt
-                    dropdownListFrame.Visible = false
-                    pcall(callback, opt)
-                    if globalCallback then pcall(globalCallback, "Dropdown", name, opt) end
-                end
-
-                optBtn.MouseButton1Click:Connect(selectOpt)
-                optBtn.TouchTap:Connect(selectOpt)
+                -- Prefer Activated (handles touch/mouse/gamepad). Add InputBegan fallback.
+                optBtn.Activated:Connect(function()
+                    selectOption(opt)
+                end)
+                optBtn.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.Touch then
+                        selectOption(opt)
+                    end
+                end)
             end
 
             local function toggleDropdown()
                 dropdownListFrame.Visible = not dropdownListFrame.Visible
             end
-
-            dropdownBtn.MouseButton1Click:Connect(toggleDropdown)
-            dropdownBtn.TouchTap:Connect(toggleDropdown)
+            dropdownBtn.Activated:Connect(toggleDropdown)
+            dropdownBtn.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    toggleDropdown()
+                end
+            end)
 
             createRow(tabFrame, name..":", dropdownFrame)
             return dropdownFrame
         end
 
-        -- Textbox (mobile keyboard friendly)
+        -- Textbox (CaptureFocus on touch + FocusLost for enter)
         function Tab:CreateTextbox(name, placeholder, callback)
             callback = callback or function() end
             placeholder = placeholder or ""
@@ -587,6 +594,17 @@ function Library:CreateWindow(guiName, subtitle, version)
             tb.ClearTextOnFocus = false
             createUICorner(tb, UDim.new(0,8))
 
+            -- If touch begins on the textbox, explicitly capture focus to open mobile keyboard
+            tb.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    -- sometimes Focus doesn't trigger due to scrolling; force it
+                    pcall(function() tb:CaptureFocus() end)
+                end
+            end)
+
+            tb.Focused:Connect(function()
+                -- optional: you can change appearance when focused
+            end)
             tb.FocusLost:Connect(function(enterPressed)
                 if enterPressed then
                     pcall(callback, tb.Text)
@@ -598,7 +616,7 @@ function Library:CreateWindow(guiName, subtitle, version)
             return tb
         end
 
-        -- Button (mobile friendly)
+        -- Button (Activated)
         function Tab:CreateButton(name, callback)
             callback = callback or function() end
             local btn = Instance.new("TextButton")
@@ -615,8 +633,15 @@ function Library:CreateWindow(guiName, subtitle, version)
                 if globalCallback then pcall(globalCallback, "Button", name, true) end
             end
 
-            btn.MouseButton1Click:Connect(press)
-            btn.TouchTap:Connect(press)
+            -- Activated is reliable across inputs
+            btn.Activated:Connect(press)
+            btn.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    -- InputBegan sometimes fires before Activated on mobile; ensure responsiveness
+                    -- But avoid double-calling by not calling press here (Activated will also fire).
+                    -- We only use CaptureFocus pattern for TextBox; leave button to Activated.
+                end
+            end)
 
             createRow(tabFrame, name..":", btn)
             return btn
