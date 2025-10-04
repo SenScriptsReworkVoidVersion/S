@@ -1,16 +1,11 @@
--- DarkMirror Classic UI Library (Executor Safe)
--- By Copilot: Patched for executor use! Always parents to PlayerGui correctly.
+-- Minimal Executor UI Library: Rebuilt Elements (ALWAYS shows controls)
+-- Paste this file, then do: local Library = loadstring(readfile("dark_mirror_ui.lua"))()
+-- Or use loadstring(game:HttpGet("..."))() if using a remote loader
 
 local Library = {}
 Library.__index = Library
 
--- Global callback
-local globalCallback = nil
-function Library:SetCallback(func)
-    globalCallback = func
-end
-
--- Executor-safe PlayerGui getter
+-- Utility: Safe PlayerGui getter
 local function getPlayerGui()
     local lp = game:GetService("Players").LocalPlayer
     local pg
@@ -21,817 +16,405 @@ local function getPlayerGui()
     return pg
 end
 
--- Theme
-local THEME = {
-    bg = Color3.fromRGB(18,18,18),
-    panel = Color3.fromRGB(28,28,28),
-    accent = Color3.fromRGB(220,50,50),
-    accentDark = Color3.fromRGB(160,30,30),
-    white = Color3.fromRGB(242,242,242),
-    dim = Color3.fromRGB(200,200,200),
-    shadowImg = "rbxassetid://1316045217"
-}
+function Library:CreateWindow(title, subtitle, version)
+    -- Root UI
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "ExecutorUI"
+    gui.Parent = getPlayerGui()
+    gui.IgnoreGuiInset = true
+    gui.ResetOnSpawn = false
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- Root GUI
-local baseScreenGui = Instance.new("ScreenGui")
-baseScreenGui.Name = "DarkMirrorClassicUI_Cool"
-baseScreenGui.ResetOnSpawn = false
-baseScreenGui.Parent = getPlayerGui()
-
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-
-local function createUICorner(instance, radius)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = radius or UDim.new(0, 8)
-    c.Parent = instance
-    return c
-end
-local function createUIStroke(instance, color, thickness)
-    local s = Instance.new("UIStroke")
-    s.Color = color or THEME.accent
-    s.Thickness = thickness or 1
-    s.Parent = instance
-    return s
-end
-local function createShadow(parent)
-    local img = Instance.new("ImageLabel")
-    img.AnchorPoint = Vector2.new(0.5,0.5)
-    img.Position = UDim2.new(0.5,0.5,0.5,0.5)
-    img.Size = UDim2.new(1.12,0,1.18,0)
-    img.ZIndex = (parent.ZIndex or 1) - 1
-    img.BackgroundTransparency = 1
-    img.Image = THEME.shadowImg
-    img.ImageTransparency = 0.78
-    img.Parent = parent
-    return img
-end
-
-local function isPressInput(input)
-    return input and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
-end
-
-local function isPointInGui(point, gui)
-    if not gui or not gui:IsA("GuiObject") then return false end
-    local ap = gui.AbsolutePosition
-    local asz = gui.AbsoluteSize
-    return point.X >= ap.X and point.X <= (ap.X + asz.X) and point.Y >= ap.Y and point.Y <= (ap.Y + asz.Y)
-end
-
-local function attachPressHandler(guiObject, callback)
-    if not guiObject or not callback then return end
-    local last = 0
-    local debounceWindow = 0.22
-    local function trigger()
-        local now = os.clock()
-        if now - last < debounceWindow then return end
-        last = now
-        pcall(callback)
-    end
-
-    local aConn
-    if guiObject.Activated then
-        aConn = guiObject.Activated:Connect(trigger)
-    end
-    local mConn
-    if guiObject:IsA("GuiButton") then
-        mConn = guiObject.MouseButton1Click:Connect(trigger)
-    end
-
-    local beganConn
-    beganConn = UserInputService.InputBegan:Connect(function(input, processed)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local pos = input.Position or UserInputService:GetMouseLocation()
-            if isPointInGui(pos, guiObject) then
-                trigger()
-            end
-        end
-    end)
-
-    local ancestryConn
-    ancestryConn = guiObject.AncestryChanged:Connect(function(_, parent)
-        if not parent then
-            if aConn then aConn:Disconnect() end
-            if mConn then mConn:Disconnect() end
-            if beganConn then beganConn:Disconnect() end
-            if ancestryConn then ancestryConn:Disconnect() end
-        end
-    end)
-end
-
--- Floating toggle button (draggable)
-local floatBtn = Instance.new("ImageButton")
-floatBtn.Size = UDim2.new(0,58,0,58)
-floatBtn.Position = UDim2.new(0,22,0.5,-29)
-floatBtn.AnchorPoint = Vector2.new(0,0.5)
-floatBtn.BackgroundColor3 = THEME.panel
-floatBtn.Image = ""
-floatBtn.Parent = baseScreenGui
-createUICorner(floatBtn, UDim.new(0,12))
-createShadow(floatBtn)
-createUIStroke(floatBtn, Color3.fromRGB(40,40,40),1)
-
-local dragging, dragInput, dragStart, startPos
-floatBtn.InputBegan:Connect(function(input)
-    if isPressInput(input) then
-        dragging = true
-        dragStart = input.Position
-        startPos = floatBtn.Position
-        dragInput = input
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-                dragInput = nil
-            end
-        end)
-    end
-end)
-floatBtn.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        floatBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
-
-local floatIco = Instance.new("ImageLabel")
-floatIco.Size = UDim2.new(0,34,0,34)
-floatIco.Position = UDim2.new(0.5,-17,0.5,-17)
-floatIco.BackgroundTransparency = 1
-floatIco.Image = "rbxassetid://94371101129415"
-floatIco.Parent = floatBtn
-
-function Library:CreateWindow(guiName, subtitle, version)
-    local Window = {}
-    Window.__index = Window
-
+    -- Main window
     local main = Instance.new("Frame")
-    main.Name = guiName or "DarkMirrorClassicUI"
-    main.Size = UDim2.new(0,520,0,360)
-    main.Position = UDim2.new(0.5,-260,0.5,-180)
-    main.BackgroundColor3 = THEME.bg
+    main.Size = UDim2.new(0, 400, 0, 400)
+    main.Position = UDim2.new(0.5, -200, 0.5, -200)
+    main.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
     main.BorderSizePixel = 0
-    main.Parent = baseScreenGui
-    createUICorner(main)
-    createShadow(main)
-    main.ZIndex = 50
+    main.Parent = gui
 
-    local titleBar = Instance.new("Frame")
-    titleBar.Size = UDim2.new(1,0,0,52)
-    titleBar.BackgroundTransparency = 0
-    titleBar.BackgroundColor3 = THEME.panel
-    titleBar.Parent = main
-    createUICorner(titleBar, UDim.new(0,10))
+    local uic = Instance.new("UICorner", main)
+    uic.CornerRadius = UDim.new(0, 12)
 
-    local title = Instance.new("TextLabel")
-    title.Text = guiName or "DarkMirrorUI"
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 22
-    title.TextColor3 = THEME.accent
-    title.BackgroundTransparency = 1
-    title.Position = UDim2.new(0,18,0,10)
-    title.Size = UDim2.new(0,240,0,28)
-    title.Parent = titleBar
+    -- Title
+    local titlebar = Instance.new("TextLabel")
+    titlebar.Size = UDim2.new(1,0,0,42)
+    titlebar.BackgroundTransparency = 1
+    titlebar.Text = (title or "UI").."  "..(subtitle or "").."  "..(version or "")
+    titlebar.Font = Enum.Font.GothamBold
+    titlebar.TextSize = 20
+    titlebar.TextColor3 = Color3.fromRGB(220, 50, 50)
+    titlebar.Parent = main
 
-    local sub = Instance.new("TextLabel")
-    sub.Text = subtitle or ""
-    sub.Font = Enum.Font.Gotham
-    sub.TextSize = 13
-    sub.TextColor3 = THEME.dim
-    sub.BackgroundTransparency = 1
-    sub.Position = UDim2.new(0,18,0,32)
-    sub.Size = UDim2.new(0,300,0,16)
-    sub.Parent = titleBar
+    -- Tab buttons (for multi-tab support)
+    local tabBar = Instance.new("Frame")
+    tabBar.Size = UDim2.new(1,0,0,32)
+    tabBar.Position = UDim2.new(0,0,0,42)
+    tabBar.BackgroundTransparency = 1
+    tabBar.Parent = main
 
-    local ver = Instance.new("TextLabel")
-    ver.Text = version or ""
-    ver.Font = Enum.Font.GothamBold
-    ver.TextSize = 12
-    ver.TextColor3 = THEME.dim
-    ver.BackgroundTransparency = 1
-    ver.Position = UDim2.new(1,-110,0,18)
-    ver.Size = UDim2.new(0,96,0,16)
-    ver.TextXAlignment = Enum.TextXAlignment.Right
-    ver.Parent = titleBar
+    local tabButtonLayout = Instance.new("UIListLayout", tabBar)
+    tabButtonLayout.FillDirection = Enum.FillDirection.Horizontal
+    tabButtonLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    tabButtonLayout.Padding = UDim.new(0,8)
 
-    -- Dragging main with titlebar
-    do
-        local draggingWin, dragInputWin, dragStartWin, startPosWin
-        titleBar.InputBegan:Connect(function(input)
-            if isPressInput(input) then
-                draggingWin = true
-                dragStartWin = input.Position
-                startPosWin = main.Position
-                dragInputWin = input
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then
-                        draggingWin = false
-                        dragInputWin = nil
-                    end
-                end)
-            end
+    -- Content holder
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Size = UDim2.new(1,-20,1,-84)
+    contentFrame.Position = UDim2.new(0,10,0,74)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.Parent = main
+
+    -- Tabs logic
+    local tabs = {}
+    local contentFrames = {}
+
+    function Library:CreateTab(tabName)
+        -- Tab button
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0, 90, 1, 0)
+        btn.Text = tabName
+        btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 16
+        btn.Parent = tabBar
+
+        -- Tab content
+        local tabContent = Instance.new("ScrollingFrame")
+        tabContent.Size = UDim2.new(1,0,1,0)
+        tabContent.Position = UDim2.new(0,0,0,0)
+        tabContent.BackgroundTransparency = 1
+        tabContent.CanvasSize = UDim2.new(0,0,0,0)
+        tabContent.ScrollBarThickness = 6
+        tabContent.Visible = false
+        tabContent.Parent = contentFrame
+
+        local layout = Instance.new("UIListLayout", tabContent)
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Padding = UDim.new(0,8)
+
+        -- Tab switching logic
+        btn.MouseButton1Click:Connect(function()
+            for _, f in pairs(contentFrames) do f.Visible = false end
+            for _, b in pairs(tabs) do b.BackgroundColor3 = Color3.fromRGB(40,40,40) end
+            tabContent.Visible = true
+            btn.BackgroundColor3 = Color3.fromRGB(220,50,50)
         end)
-        titleBar.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-                dragInputWin = input
-            end
-        end)
-        UserInputService.InputChanged:Connect(function(input)
-            if input == dragInputWin and draggingWin then
-                local delta = input.Position - dragStartWin
-                main.Position = UDim2.new(startPosWin.X.Scale, startPosWin.X.Offset + delta.X, startPosWin.Y.Scale, startPosWin.Y.Offset + delta.Y)
-            end
-        end)
-    end
 
-    local sidebar = Instance.new("ScrollingFrame")
-    sidebar.Size = UDim2.new(0,170,1,-60)
-    sidebar.Position = UDim2.new(0,0,0,60)
-    sidebar.BackgroundTransparency = 0
-    sidebar.BackgroundColor3 = THEME.panel
-    sidebar.ScrollBarThickness = 6
-    sidebar.Parent = main
-    createUICorner(sidebar, UDim.new(0,8))
-    sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    sidebar.ZIndex = 51
-
-    local sideLayout = Instance.new("UIListLayout", sidebar)
-    sideLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    sideLayout.Padding = UDim.new(0,8)
-
-    local content = Instance.new("ScrollingFrame")
-    content.Size = UDim2.new(1,-186,1,-76)
-    content.Position = UDim2.new(0,186,0,76)
-    content.BackgroundColor3 = Color3.fromRGB(14,14,14)
-    content.BackgroundTransparency = 0
-    content.ScrollBarThickness = 8
-    content.Parent = main
-    content.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    content.ZIndex = 51
-
-    local tabFrames = {}
-    local sidebarButtons = {}
-
-    attachPressHandler(floatBtn, function()
-        main.Visible = not main.Visible
-    end)
-
-    function Window:CreateTab(name)
-        local tab = Instance.new("Frame")
-        tab.Size = UDim2.new(1,0,1,0)
-        tab.BackgroundTransparency = 1
-        tab.Parent = content
-        tabFrames[name] = tab
-        tab.ZIndex = 52
-
-        local stack = Instance.new("Frame")
-        stack.Name = "Stack"
-        stack.BackgroundTransparency = 1
-        stack.Size = UDim2.new(1,0,1,0)
-        stack.AutomaticSize = Enum.AutomaticSize.Y
-        stack.Parent = tab
-
-        local layout = Instance.new("UIListLayout", stack)
-        layout.FillDirection = Enum.FillDirection.Vertical
-        layout.Padding = UDim.new(0, 10)
-
-        local sb = Instance.new("TextButton")
-        sb.Size = UDim2.new(1,-16,0,42)
-        sb.Position = UDim2.new(0,8,0,0)
-        sb.BackgroundColor3 = THEME.panel
-        sb.Text = name
-        sb.Font = Enum.Font.GothamBold
-        sb.TextSize = 16
-        sb.TextColor3 = THEME.white
-        sb.Parent = sidebar
-        sb.ZIndex = 53
-        createUICorner(sb, UDim.new(0,8))
-
-        local function selectTab()
-            for _,f in pairs(tabFrames) do f.Visible = false end
-            tab.Visible = true
-            for _,b in pairs(sidebarButtons) do b.BackgroundColor3 = THEME.panel; b.TextColor3 = THEME.white end
-            sb.BackgroundColor3 = THEME.accentDark
-            sb.TextColor3 = THEME.white
-        end
-        attachPressHandler(sb, selectTab)
-
-        table.insert(sidebarButtons, sb)
-        if #sidebarButtons == 1 then
-            selectTab()
+        table.insert(tabs, btn)
+        table.insert(contentFrames, tabContent)
+        if #contentFrames == 1 then
+            tabContent.Visible = true
+            btn.BackgroundColor3 = Color3.fromRGB(220,50,50)
         end
 
-        local TabAPI = {}
-        TabAPI.__index = TabAPI
+        -- Tab API
+        local Tab = {}
 
-        local function addControl(ctrl)
-            ctrl.Parent = stack
-            return ctrl
+        function Tab:CreateSection(text)
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(1,0,0,28)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = text
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextSize = 17
+            lbl.TextColor3 = Color3.fromRGB(220,50,50)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = tabContent
+            return lbl
         end
 
-        function TabAPI:CreateSection(titleText)
-            local sec = Instance.new("Frame")
-            sec.Size = UDim2.new(1,0,0,28)
-            sec.BackgroundTransparency = 0
-            sec.BackgroundColor3 = THEME.bg
-            createUICorner(sec, UDim.new(0,6))
-            local txt = Instance.new("TextLabel")
-            txt.Text = titleText
-            txt.Font = Enum.Font.GothamBold
-            txt.TextSize = 16
-            txt.TextColor3 = THEME.accent
-            txt.BackgroundTransparency = 1
-            txt.Position = UDim2.new(0,8,0,4)
-            txt.Size = UDim2.new(1,-16,1,-8)
-            txt.TextXAlignment = Enum.TextXAlignment.Left
-            txt.Parent = sec
-            return addControl(sec)
-        end
+        function Tab:CreateToggle(text, callback)
+            local holder = Instance.new("Frame")
+            holder.Size = UDim2.new(1,0,0,32)
+            holder.BackgroundTransparency = 1
+            holder.Parent = tabContent
 
-        function TabAPI:CreateToggle(name, callback)
-            callback = callback or function() end
-            local btn = Instance.new("Frame")
-            btn.Size = UDim2.new(0,72,0,32)
-            btn.BackgroundColor3 = THEME.panel
-            createUICorner(btn, UDim.new(0,16))
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.75,0,1,0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = text
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 15
+            lbl.TextColor3 = Color3.new(1,1,1)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = holder
 
-            local track = Instance.new("Frame")
-            track.Size = UDim2.new(1,-8,0,16)
-            track.Position = UDim2.new(0,4,0.5,-8)
-            track.BackgroundColor3 = Color3.fromRGB(60,60,60)
-            track.Parent = btn
-            createUICorner(track, UDim.new(0,8))
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(0,40,0,24)
+            btn.Position = UDim2.new(1,-44,0.5,-12)
+            btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+            btn.Text = ""
+            btn.Parent = holder
 
-            local thumb = Instance.new("Frame")
-            thumb.Size = UDim2.new(0,18,0,18)
-            thumb.Position = UDim2.new(0,3,0.5,-9)
-            thumb.BackgroundColor3 = THEME.white
-            thumb.Parent = btn
-            createUICorner(thumb, UDim.new(0,9))
+            local uic = Instance.new("UICorner", btn)
+            uic.CornerRadius = UDim.new(0,12)
 
             local state = false
-            local function update(now)
-                if now then
-                    TweenService:Create(track, TweenInfo.new(0.16), {BackgroundColor3 = THEME.accent}):Play()
-                    TweenService:Create(thumb, TweenInfo.new(0.16), {Position = UDim2.new(1,-21,0.5,-9)}):Play()
-                else
-                    TweenService:Create(track, TweenInfo.new(0.16), {BackgroundColor3 = Color3.fromRGB(60,60,60)}):Play()
-                    TweenService:Create(thumb, TweenInfo.new(0.16), {Position = UDim2.new(0,3,0.5,-9)}):Play()
-                end
-            end
-
-            attachPressHandler(btn, function()
+            btn.MouseButton1Click:Connect(function()
                 state = not state
-                update(state)
-                pcall(callback, state)
-                if globalCallback then pcall(globalCallback, "Toggle", name, state) end
+                btn.BackgroundColor3 = state and Color3.fromRGB(220,50,50) or Color3.fromRGB(60,60,60)
+                if callback then pcall(callback, state) end
             end)
-
-            return addControl(btn)
+            return btn
         end
 
-        function TabAPI:CreateSlider(name, min, max, default, callback)
-            if type(default) == "function" and callback == nil then
-                callback = default; default = min or 0
-            end
-            min = min or 0 max = max or 100 default = default or min
-            callback = callback or function() end
+        function Tab:CreateSlider(text, min, max, default, callback)
+            min = min or 0
+            max = max or 100
+            default = default or min
 
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(0,240,0,36)
-            frame.BackgroundColor3 = THEME.panel
-            createUICorner(frame, UDim.new(0,8))
+            local holder = Instance.new("Frame")
+            holder.Size = UDim2.new(1,0,0,38)
+            holder.BackgroundTransparency = 1
+            holder.Parent = tabContent
 
-            local track = Instance.new("Frame")
-            track.Size = UDim2.new(1,-72,0,8)
-            track.Position = UDim2.new(0,12,0.5,-4)
-            track.BackgroundColor3 = Color3.fromRGB(70,70,70)
-            track.Parent = frame
-            createUICorner(track, UDim.new(0,4))
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.5,0,1,0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = text
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 15
+            lbl.TextColor3 = Color3.new(1,1,1)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = holder
+
+            local slider = Instance.new("Frame")
+            slider.Size = UDim2.new(0.4,0,0,8)
+            slider.Position = UDim2.new(0.55,0,0.5,-4)
+            slider.BackgroundColor3 = Color3.fromRGB(60,60,60)
+            slider.Parent = holder
+            local uic = Instance.new("UICorner", slider)
+            uic.CornerRadius = UDim.new(0,4)
 
             local thumb = Instance.new("Frame")
             thumb.Size = UDim2.new(0,18,0,18)
-            thumb.Position = UDim2.new(0,0,0.5,-9)
-            thumb.BackgroundColor3 = THEME.white
-            thumb.Parent = frame
-            createUICorner(thumb, UDim.new(0,9))
+            thumb.Position = UDim2.new((default-min)/(max-min),-9,0.5,-9)
+            thumb.BackgroundColor3 = Color3.fromRGB(220,50,50)
+            thumb.Parent = slider
+            local uic2 = Instance.new("UICorner", thumb)
+            uic2.CornerRadius = UDim.new(0,9)
 
-            local valLabel = Instance.new("TextLabel")
-            valLabel.Size = UDim2.new(0,56,0,24)
-            valLabel.Position = UDim2.new(1,-58,0.5,-12)
-            valLabel.BackgroundTransparency = 1
-            valLabel.Font = Enum.Font.GothamBold
-            valLabel.TextSize = 14
-            valLabel.TextColor3 = THEME.white
-            valLabel.Text = tostring(default)
-            valLabel.Parent = frame
+            local valLbl = Instance.new("TextLabel")
+            valLbl.Size = UDim2.new(0,34,1,0)
+            valLbl.Position = UDim2.new(1,4,0,0)
+            valLbl.BackgroundTransparency = 1
+            valLbl.Text = tostring(default)
+            valLbl.Font = Enum.Font.GothamBold
+            valLbl.TextSize = 13
+            valLbl.TextColor3 = Color3.fromRGB(220,50,50)
+            valLbl.Parent = slider
 
-            local draggingInput = nil
+            local dragging = false
             local function setFromX(px)
-                local ap = track.AbsolutePosition.X
-                local asz = track.AbsoluteSize.X
+                local ap = slider.AbsolutePosition.X
+                local asz = slider.AbsoluteSize.X
                 if asz <= 0 then return end
                 local rel = math.clamp((px - ap)/asz, 0, 1)
-                TweenService:Create(thumb, TweenInfo.new(0.06), {Position = UDim2.new(rel, -9, 0.5, -9)}):Play()
-                local value = math.floor(min + (max - min) * rel)
-                valLabel.Text = tostring(value)
-                pcall(callback, value)
-                if globalCallback then pcall(globalCallback, "Slider", name, value) end
+                thumb.Position = UDim2.new(rel, -9, 0.5, -9)
+                local value = math.floor(min + (max - min) * rel + 0.5)
+                valLbl.Text = tostring(value)
+                if callback then pcall(callback, value) end
             end
 
-            local beganConn; local changedConn; local endedConn
-            beganConn = UserInputService.InputBegan:Connect(function(input, processed)
-                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    local pos = input.Position or UserInputService:GetMouseLocation()
-                    if isPointInGui(pos, track) then
-                        draggingInput = input
-                        setFromX(pos.X)
-                    end
+            thumb.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = true
                 end
             end)
-            changedConn = UserInputService.InputChanged:Connect(function(input)
-                if draggingInput and input == draggingInput then
-                    local pos = input.Position or UserInputService:GetMouseLocation()
-                    setFromX(pos.X)
+            thumb.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = false
                 end
             end)
-            endedConn = UserInputService.InputEnded:Connect(function(input)
-                if draggingInput and input == draggingInput then
-                    draggingInput = nil
+            thumb.InputChanged:Connect(function(input)
+                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    setFromX(input.Position.X)
+                end
+            end)
+            slider.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = true
+                    setFromX(input.Position.X)
+                end
+            end)
+            slider.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = false
+                end
+            end)
+            slider.InputChanged:Connect(function(input)
+                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    setFromX(input.Position.X)
                 end
             end)
 
-            frame.AncestryChanged:Connect(function(_, parent)
-                if not parent then
-                    if beganConn then beganConn:Disconnect() end
-                    if changedConn then changedConn:Disconnect() end
-                    if endedConn then endedConn:Disconnect() end
-                end
-            end)
+            -- Set initial value
+            setFromX(slider.AbsolutePosition.X + slider.AbsoluteSize.X * ((default-min)/(max-min)))
 
-            task.spawn(function()
-                local rel = 0
-                if max ~= min then rel = (default - min)/(max - min) end
-                thumb.Position = UDim2.new(rel, -9, 0.5, -9)
-                valLabel.Text = tostring(default)
-            end)
-
-            return addControl(frame)
+            return slider
         end
 
-        function TabAPI:CreateDropdown(name, options, callback)
+        function Tab:CreateDropdown(text, options, callback)
             options = options or {}
-            callback = callback or function() end
+            local holder = Instance.new("Frame")
+            holder.Size = UDim2.new(1,0,0,34)
+            holder.BackgroundTransparency = 1
+            holder.Parent = tabContent
 
-            local container = Instance.new("Frame")
-            container.Size = UDim2.new(0,200,0,38)
-            container.BackgroundColor3 = THEME.panel
-            createUICorner(container, UDim.new(0,8))
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.5,0,1,0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = text
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 15
+            lbl.TextColor3 = Color3.new(1,1,1)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = holder
 
-            local label = Instance.new("TextLabel")
-            label.Size = UDim2.new(1,-36,1,0)
-            label.BackgroundTransparency = 1
-            label.Text = "Select..."
-            label.Font = Enum.Font.GothamBold
-            label.TextColor3 = THEME.white
-            label.TextSize = 14
-            label.Position = UDim2.new(0,8,0,0)
-            label.Parent = container
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(0,120,0,28)
+            btn.Position = UDim2.new(1,-124,0.5,-14)
+            btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+            btn.Text = "Select..."
+            btn.Font = Enum.Font.Gotham
+            btn.TextSize = 14
+            btn.TextColor3 = Color3.fromRGB(255,255,255)
+            btn.Parent = holder
+            local uic = Instance.new("UICorner", btn)
+            uic.CornerRadius = UDim.new(0,8)
 
-            local arrow = Instance.new("ImageLabel")
-            arrow.Size = UDim2.new(0,20,0,20)
-            arrow.Position = UDim2.new(1,-28,0.5,-10)
-            arrow.BackgroundTransparency = 1
-            arrow.Image = "rbxassetid://3926305904"
-            arrow.Rotation = 90
-            arrow.Parent = container
+            local drop = Instance.new("Frame")
+            drop.Size = UDim2.new(0,120,0,math.min(8+#options*28, 120))
+            drop.Position = UDim2.new(1,-124,1,0)
+            drop.BackgroundColor3 = Color3.fromRGB(30,30,30)
+            drop.Visible = false
+            drop.Parent = holder
+            drop.ZIndex = 10
+            local uicd = Instance.new("UICorner", drop)
+            uicd.CornerRadius = UDim.new(0,8)
 
-            local dropdownFrame = Instance.new("Frame")
-            dropdownFrame.Size = UDim2.new(1, 0, 0, 0)
-            dropdownFrame.Position = UDim2.new(0, 0, 1, 4)
-            dropdownFrame.BackgroundColor3 = Color3.fromRGB(22,22,22)
-            dropdownFrame.Visible = false
-            dropdownFrame.ClipsDescendants = true
-            dropdownFrame.Parent = container
-            createUICorner(dropdownFrame, UDim.new(0,8))
-            dropdownFrame.ZIndex = 100
+            local droplay = Instance.new("UIListLayout", drop)
+            droplay.SortOrder = Enum.SortOrder.LayoutOrder
+            droplay.Padding = UDim.new(0,2)
 
-            local scroll = Instance.new("ScrollingFrame")
-            scroll.Size = UDim2.new(1,0,1,0)
-            scroll.BackgroundTransparency = 1
-            scroll.CanvasSize = UDim2.new(0,0,0, #options*34)
-            scroll.ScrollBarThickness = 8
-            scroll.Parent = dropdownFrame
-            scroll.ZIndex = 101
-            scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+            btn.MouseButton1Click:Connect(function()
+                drop.Visible = not drop.Visible
+            end)
 
-            local layout = Instance.new("UIListLayout", scroll)
-            layout.SortOrder = Enum.SortOrder.LayoutOrder
-            layout.Padding = UDim.new(0, 2)
-
-            local function openDropdown()
-                dropdownFrame.Visible = not dropdownFrame.Visible
-                TweenService:Create(arrow, TweenInfo.new(0.18), {Rotation = dropdownFrame.Visible and 270 or 90}):Play()
-                if dropdownFrame.Visible then
-                    dropdownFrame.Size = UDim2.new(1,0,0,0)
-                    TweenService:Create(dropdownFrame, TweenInfo.new(0.21), {Size = UDim2.new(1,0,0, math.min(#options*34+8, 180))}):Play()
-                else
-                    TweenService:Create(dropdownFrame, TweenInfo.new(0.18), {Size = UDim2.new(1,0,0,0)}):Play()
-                end
-            end
-
-            attachPressHandler(container, openDropdown)
-
-            for _,opt in ipairs(options) do
-                local b = Instance.new("TextButton")
-                b.Size = UDim2.new(1,0,0,32)
-                b.BackgroundColor3 = Color3.fromRGB(27,27,27)
-                b.Text = opt
-                b.Font = Enum.Font.Gotham
-                b.TextColor3 = THEME.white
-                b.TextSize = 14
-                b.Parent = scroll
-                b.ZIndex = 102
-                createUICorner(b, UDim.new(0,6))
-
-                attachPressHandler(b, function()
-                    label.Text = opt
-                    openDropdown()
-                    pcall(callback, opt)
-                    if globalCallback then pcall(globalCallback, "Dropdown", name, opt) end
+            for _, opt in ipairs(options) do
+                local optBtn = Instance.new("TextButton")
+                optBtn.Size = UDim2.new(1,0,0,26)
+                optBtn.Text = opt
+                optBtn.Font = Enum.Font.Gotham
+                optBtn.TextSize = 13
+                optBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+                optBtn.TextColor3 = Color3.new(1,1,1)
+                optBtn.Parent = drop
+                optBtn.MouseButton1Click:Connect(function()
+                    btn.Text = opt
+                    drop.Visible = false
+                    if callback then pcall(callback, opt) end
                 end)
             end
 
-            UserInputService.InputBegan:Connect(function(input, processed)
-                if dropdownFrame.Visible and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-                    local pos = input.Position or UserInputService:GetMouseLocation()
-                    if not isPointInGui(pos, dropdownFrame) and not isPointInGui(pos, container) then
-                        openDropdown()
-                    end
-                end
-            end)
-
-            return addControl(container)
+            return btn
         end
 
-        function TabAPI:CreateTextbox(name, placeholder, callback)
-            callback = callback or function() end
-            placeholder = placeholder or ""
+        function Tab:CreateTextbox(text, placeholder, callback)
+            local holder = Instance.new("Frame")
+            holder.Size = UDim2.new(1,0,0,34)
+            holder.BackgroundTransparency = 1
+            holder.Parent = tabContent
+
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.5,0,1,0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = text
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 15
+            lbl.TextColor3 = Color3.new(1,1,1)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = holder
 
             local box = Instance.new("TextBox")
-            box.Size = UDim2.new(0,220,0,32)
+            box.Size = UDim2.new(0,120,0,28)
+            box.Position = UDim2.new(1,-124,0.5,-14)
             box.BackgroundColor3 = Color3.fromRGB(40,40,40)
-            box.Text = ""
-            box.PlaceholderText = placeholder
+            box.PlaceholderText = placeholder or ""
             box.Font = Enum.Font.Gotham
             box.TextSize = 14
-            box.TextColor3 = THEME.white
+            box.TextColor3 = Color3.fromRGB(220,50,50)
             box.ClearTextOnFocus = false
-            createUICorner(box, UDim.new(0,8))
+            box.Parent = holder
+            local uic = Instance.new("UICorner", box)
+            uic.CornerRadius = UDim.new(0,8)
 
-            local glow = Instance.new("UIStroke", box)
-            glow.Transparency = 1
-            glow.Thickness = 2
-            glow.Color = THEME.accent
-
-            box.Focused:Connect(function()
-                TweenService:Create(glow, TweenInfo.new(0.15), {Transparency = 0}):Play()
-            end)
             box.FocusLost:Connect(function(enter)
-                TweenService:Create(glow, TweenInfo.new(0.15), {Transparency = 1}):Play()
-                if enter then
-                    pcall(callback, box.Text)
-                    if globalCallback then pcall(globalCallback, "Textbox", name, box.Text) end
-                end
+                if enter and callback then pcall(callback, box.Text) end
             end)
-
-            local beganConn
-            beganConn = UserInputService.InputBegan:Connect(function(input, processed)
-                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    local pos = input.Position or UserInputService:GetMouseLocation()
-                    if isPointInGui(pos, box) then
-                        pcall(function() if box and box.Parent then box:CaptureFocus() end end)
-                    end
-                end
-            end)
-            box.AncestryChanged:Connect(function(_, parent)
-                if not parent and beganConn then beganConn:Disconnect() end
-            end)
-
-            return addControl(box)
+            return box
         end
 
-        function TabAPI:CreateButton(name, callback)
-            callback = callback or function() end
-            local b = Instance.new("TextButton")
-            b.Size = UDim2.new(0,140,0,36)
-            b.BackgroundColor3 = THEME.accent
-            b.Text = name
-            b.Font = Enum.Font.GothamBold
-            b.TextSize = 15
-            b.TextColor3 = THEME.white
-            createUICorner(b, UDim.new(0,10))
-            createShadow(b)
-
-            attachPressHandler(b, function()
-                TweenService:Create(b, TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = THEME.accentDark}):Play()
-                task.delay(0.09, function()
-                    TweenService:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = THEME.accent}):Play()
-                end)
-                pcall(callback)
-                if globalCallback then pcall(globalCallback, "Button", name, true) end
+        function Tab:CreateButton(text, callback)
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(0,140,0,32)
+            btn.BackgroundColor3 = Color3.fromRGB(220,50,50)
+            btn.Text = text
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 15
+            btn.TextColor3 = Color3.fromRGB(255,255,255)
+            btn.Parent = tabContent
+            local uic = Instance.new("UICorner", btn)
+            uic.CornerRadius = UDim.new(0,10)
+            btn.MouseButton1Click:Connect(function()
+                if callback then pcall(callback) end
             end)
-
-            return addControl(b)
+            return btn
         end
 
-        function TabAPI:CreateColorPicker(name, default, callback)
-            callback = callback or function() end
-            default = default or Color3.fromRGB(255,0,0)
-            local picker = Instance.new("Frame")
-            picker.Size = UDim2.new(0,220,0,60)
-            picker.BackgroundColor3 = THEME.panel
-            picker.ClipsDescendants = false
-            createUICorner(picker, UDim.new(0,8))
+        -- Simple Color Picker: toggles between red, green, blue
+        function Tab:CreateColorPicker(text, default, callback)
+            local holder = Instance.new("Frame")
+            holder.Size = UDim2.new(1,0,0,34)
+            holder.BackgroundTransparency = 1
+            holder.Parent = tabContent
 
-            local preview = Instance.new("Frame")
-            preview.Size = UDim2.new(0,38,0,38)
-            preview.Position = UDim2.new(0,10,0.5,-19)
-            preview.BackgroundColor3 = default
-            preview.Parent = picker
-            createUICorner(preview, UDim.new(0,8))
-            createUIStroke(preview, THEME.accent, 1)
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(0.5,0,1,0)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = text
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 15
+            lbl.TextColor3 = Color3.new(1,1,1)
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Parent = holder
 
-            local expand = Instance.new("TextButton")
-            expand.Size = UDim2.new(0,38,0,38)
-            expand.Position = UDim2.new(0,10,0.5,-19)
-            expand.BackgroundTransparency = 1
-            expand.Text = ""
-            expand.Parent = picker
-            expand.ZIndex = 2
+            local clr = default or Color3.fromRGB(255,0,0)
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(0,40,0,28)
+            btn.Position = UDim2.new(1,-44,0.5,-14)
+            btn.BackgroundColor3 = clr
+            btn.Text = ""
+            btn.Parent = holder
+            local uic = Instance.new("UICorner", btn)
+            uic.CornerRadius = UDim.new(0,8)
 
-            local valText = Instance.new("TextLabel")
-            valText.Size = UDim2.new(0,90,0,26)
-            valText.Position = UDim2.new(0,60,0.5,-13)
-            valText.BackgroundTransparency = 1
-            valText.Text = string.format("R:%d G:%d B:%d", default.R*255, default.G*255, default.B*255)
-            valText.Font = Enum.Font.Gotham
-            valText.TextSize = 13
-            valText.TextColor3 = THEME.white
-            valText.TextXAlignment = Enum.TextXAlignment.Left
-            valText.Parent = picker
-
-            local overlay = Instance.new("Frame")
-            overlay.Size = UDim2.new(0,176,0,176)
-            overlay.Position = UDim2.new(0,0,1,8)
-            overlay.BackgroundColor3 = Color3.fromRGB(20,20,20)
-            overlay.Visible = false
-            overlay.Parent = picker
-            overlay.ZIndex = 100
-            overlay.AnchorPoint = Vector2.new(0,0)
-            createUICorner(overlay, UDim.new(0,8))
-            createUIStroke(overlay, THEME.accent, 1)
-            createShadow(overlay)
-
-            local hsvSquare = Instance.new("ImageButton")
-            hsvSquare.Size = UDim2.new(0,120,0,120)
-            hsvSquare.Position = UDim2.new(0,12,0,12)
-            hsvSquare.BackgroundColor3 = Color3.fromRGB(255,255,255)
-            hsvSquare.AutoButtonColor = false
-            hsvSquare.Image = "rbxassetid://6020299385"
-            hsvSquare.Parent = overlay
-
-            local hueSlider = Instance.new("ImageButton")
-            hueSlider.Size = UDim2.new(0,20,0,120)
-            hueSlider.Position = UDim2.new(0,142,0,12)
-            hueSlider.BackgroundColor3 = Color3.fromRGB(255,255,255)
-            hueSlider.AutoButtonColor = false
-            hueSlider.Image = "rbxassetid://6020299386"
-            hueSlider.Parent = overlay
-
-            local confirmBtn = Instance.new("TextButton")
-            confirmBtn.Size = UDim2.new(0,70,0,28)
-            confirmBtn.Position = UDim2.new(0.5,-35,1,-36)
-            confirmBtn.BackgroundColor3 = THEME.accent
-            confirmBtn.Font = Enum.Font.GothamBold
-            confirmBtn.TextSize = 14
-            confirmBtn.TextColor3 = THEME.white
-            confirmBtn.Text = "OK"
-            confirmBtn.Parent = overlay
-            createUICorner(confirmBtn, UDim.new(0,8))
-
-            local selH, selS, selV = Color3.toHSV(default)
-            if selS ~= selS then selS = 1 end
-            if selV ~= selV then selV = 1 end
-
-            local function updatePreview()
-                local c = Color3.fromHSV(selH, selS, selV)
-                preview.BackgroundColor3 = c
-                valText.Text = string.format("R:%d G:%d B:%d", math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255))
-            end
-
-            hsvSquare.MouseButton1Down:Connect(function(x, y)
-                local p = UserInputService:GetMouseLocation()
-                local pos = hsvSquare.AbsolutePosition
-                local size = hsvSquare.AbsoluteSize
-                local rel = Vector2.new(
-                    math.clamp((p.X-pos.X)/size.X, 0, 1),
-                    math.clamp((p.Y-pos.Y)/size.Y, 0, 1)
-                )
-                selS = rel.X
-                selV = 1-rel.Y
-                updatePreview()
+            local idx = 1
+            local palette = {Color3.fromRGB(255,0,0), Color3.fromRGB(0,255,0), Color3.fromRGB(0,0,255), Color3.fromRGB(255,255,0)}
+            btn.MouseButton1Click:Connect(function()
+                idx = idx % #palette + 1
+                btn.BackgroundColor3 = palette[idx]
+                if callback then pcall(callback, palette[idx]) end
             end)
-            hsvSquare.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    local moveConn, upConn
-                    moveConn = UserInputService.InputChanged:Connect(function(i)
-                        if i == input then
-                            local p = i.Position or UserInputService:GetMouseLocation()
-                            local pos = hsvSquare.AbsolutePosition
-                            local size = hsvSquare.AbsoluteSize
-                            local rel = Vector2.new(
-                                math.clamp((p.X-pos.X)/size.X, 0, 1),
-                                math.clamp((p.Y-pos.Y)/size.Y, 0, 1)
-                            )
-                            selS = rel.X
-                            selV = 1-rel.Y
-                            updatePreview()
-                        end
-                    end)
-                    upConn = UserInputService.InputEnded:Connect(function(i)
-                        if i == input then
-                            if moveConn then moveConn:Disconnect() end
-                            if upConn then upConn:Disconnect() end
-                        end
-                    end)
-                end
-            end)
-
-            hueSlider.MouseButton1Down:Connect(function(x, y)
-                local p = UserInputService:GetMouseLocation()
-                local pos = hueSlider.AbsolutePosition
-                local size = hueSlider.AbsoluteSize
-                local relY = math.clamp((p.Y-pos.Y)/size.Y, 0, 1)
-                selH = 1-relY
-                updatePreview()
-            end)
-            hueSlider.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                    local moveConn, upConn
-                    moveConn = UserInputService.InputChanged:Connect(function(i)
-                        if i == input then
-                            local p = i.Position or UserInputService:GetMouseLocation()
-                            local pos = hueSlider.AbsolutePosition
-                            local size = hueSlider.AbsoluteSize
-                            local relY = math.clamp((p.Y-pos.Y)/size.Y, 0, 1)
-                            selH = 1-relY
-                            updatePreview()
-                        end
-                    end)
-                    upConn = UserInputService.InputEnded:Connect(function(i)
-                        if i == input then
-                            if moveConn then moveConn:Disconnect() end
-                            if upConn then upConn:Disconnect() end
-                        end
-                    end)
-                end
-            end)
-
-            attachPressHandler(confirmBtn, function()
-                local c = Color3.fromHSV(selH, selS, selV)
-                overlay.Visible = false
-                updatePreview()
-                pcall(callback, c)
-                if globalCallback then pcall(globalCallback, "ColorPicker", name, c) end
-            end)
-
-            attachPressHandler(expand, function()
-                overlay.Visible = not overlay.Visible
-            end)
-
-            UserInputService.InputBegan:Connect(function(input, processed)
-                if overlay.Visible and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
-                    local pos = input.Position or UserInputService:GetMouseLocation()
-                    if not isPointInGui(pos, overlay) and not isPointInGui(pos, expand) then
-                        overlay.Visible = false
-                    end
-                end
-            end)
-
-            updatePreview()
-
-            return addControl(picker)
+            return btn
         end
 
-        return TabAPI
+        return Tab
     end
 
-    return Window
+    return Library
 end
 
 return Library
